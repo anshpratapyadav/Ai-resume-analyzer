@@ -1,1 +1,531 @@
 # Ai-resume-analyzer
+```
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Analyzer with Azure AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        .dropzone {
+            border: 2px dashed #0284c7;
+            border-radius: 5px;
+            padding: 25px;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .dropzone:hover {
+            background-color: #f0f9ff;
+        }
+        .dropzone.drag-over {
+            background-color: #e0f2fe;
+        }
+        .resume-card {
+            transition: all 0.3s;
+        }
+        .resume-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background-color: #e5e7eb;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-value {
+            height: 100%;
+            background-color: #3b82f6;
+            transition: width 0.3s;
+        }
+        .tabs button.active {
+            border-bottom: 2px solid #3b82f6;
+            color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-12">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold text-blue-600">Resume Analyzer</h1>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-600">Powered by</span>
+                    <img src="https://placehold.co/100x30/3b82f6/white?text=Azure+AI" alt="Microsoft Azure AI logo">
+                </div>
+            </div>
+            <p class="text-gray-600 mt-2">AI-powered resume screening and candidate matching system</p>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden mb-8">
+            <div class="tabs flex border-b border-gray-200">
+                <button class="tab-button active px-4 py-3 font-medium" onclick="switchTab('upload')">Upload Resumes</button>
+                <button class="tab-button px-4 py-3 font-medium" onclick="switchTab('requirements')">Job Requirements</button>
+                <button class="tab-button px-4 py-3 font-medium" onclick="switchTab('results')">Results</button>
+            </div>
+
+            <div id="upload-tab" class="tab-content p-6">
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold mb-4">Upload Multiple Resumes</h2>
+                    <div id="dropzone" class="dropzone">
+                        <div class="flex flex-col items-center justify-center space-y-2">
+                            <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            <p class="text-lg font-medium">Drag & drop resume files here</p>
+                            <p class="text-gray-500">or</p>
+                            <button id="browse-files" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">Browse Files</button>
+                            <input type="file" id="file-input" class="hidden" multiple accept=".pdf,.doc,.docx">
+                        </div>
+                    </div>
+                    <div class="mt-4 text-sm text-gray-500">
+                        <p>Supported formats: PDF, DOC, DOCX (Up to 100 files at once)</p>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 p-4 rounded-md">
+                    <h3 class="font-medium mb-2">Upload Progress</h3>
+                    <div class="progress-bar mb-2">
+                        <div id="progress" class="progress-value" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between text-sm text-gray-600">
+                        <span id="upload-status">Ready to upload</span>
+                        <span id="file-count">0 files selected</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="requirements-tab" class="tab-content p-6 hidden">
+                <h2 class="text-xl font-semibold mb-4">Enter Job Requirements</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 font-medium mb-2">Job Title</label>
+                            <input type="text" id="job-title" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 font-medium mb-2">Required Skills (comma separated)</label>
+                            <textarea id="required-skills" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., JavaScript, Python, Team Management"></textarea>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 font-medium mb-2">Minimum Experience (years)</label>
+                            <input type="number" id="min-experience" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                    <div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 font-medium mb-2">Education Level</label>
+                            <select id="education-level" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">Any</option>
+                                <option value="High School">High School</option>
+                                <option value="Diploma">Diploma</option>
+                                <option value="Bachelor">Bachelor's Degree</option>
+                                <option value="Master">Master's Degree</option>
+                                <option value="PhD">PhD</option>
+                            </select>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 font-medium mb-2">Location Preference</label>
+                            <input type="text" id="location-pref" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Optional">
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 font-medium mb-2">Keywords to Look For</label>
+                            <textarea id="keywords" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Agile, Scrum, Leadership"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6">
+                    <button id="analyze-btn" class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Analyze Resumes
+                    </button>
+                </div>
+            </div>
+
+            <div id="results-tab" class="tab-content p-6 hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold">Analysis Results</h2>
+                    <div class="flex space-x-2">
+                        <button id="export-csv" class="px-4 py-1 border border-gray-300 rounded-md hover:bg-gray-50 transition">
+                            Export to CSV
+                        </button>
+                        <button id="send-emails" class="px-4 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition">
+                            Send Notification Emails
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-blue-600 font-medium">Total Resumes:</span>
+                            <span id="total-resumes" class="font-bold">0</span>
+                        </div>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-green-600 font-medium">Shortlisted:</span>
+                            <span id="shortlisted-count" class="font-bold">0</span>
+                        </div>
+                    </div>
+                    <div class="bg-red-50 p-4 rounded-lg">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-red-600 font-medium">Rejected:</span>
+                            <span id="rejected-count" class="font-bold">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-white rounded-lg overflow-hidden">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-4 py-2 text-left font-medium text-gray-700">Candidate</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-700">Email</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-700">Skills Match</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-700">Experience</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-700">Education</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-700">Status</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-700">Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-table" class="divide-y divide-gray-200">
+                            <!-- Results will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Email Template Modal -->
+        <div id="email-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center border-b p-4">
+                    <h3 class="text-lg font-medium">Email Template for Shortlisted Candidates</h3>
+                    <button id="close-modal" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 font-medium mb-2">Subject</label>
+                        <input type="text" id="email-subject" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" value="Congratulations! You've been shortlisted">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 font-medium mb-2">Email Body</label>
+                        <textarea id="email-body" rows="10" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+Dear [Candidate Name],
+
+We are pleased to inform you that your application for the [Job Title] position at our company has been shortlisted for further consideration!
+
+Based on our initial screening, your qualifications and experience stood out among many applicants. 
+
+Next Steps:
+- Interview schedule will be shared shortly
+- Please be ready with your original documents
+
+If you have any questions in the meantime, feel free to reply to this email.
+
+Best regards,
+[Your Name]
+HR Team
+                        </textarea>
+                    </div>
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button id="preview-emails" class="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition">Preview Emails</button>
+                        <button id="confirm-send" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition">Confirm & Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview Modal -->
+        <div id="preview-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center border-b p-4">
+                    <h3 class="text-lg font-medium">Email Preview</h3>
+                    <button id="close-preview" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <div id="email-preview-container" class="border border-gray-200 rounded-md p-4">
+                        <!-- Preview will be inserted here -->
+                    </div>
+                    <div class="flex justify-end mt-4">
+                        <button id="back-to-edit" class="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition mr-2">Back to Edit</button>
+                        <button id="final-send" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition">Final Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let uploadedFiles = [];
+        let analysisResults = [];
+        let shortlistedCandidates = [];
+        
+        // DOM Elements
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('file-input');
+        const browseFiles = document.getElementById('browse-files');
+        const progress = document.getElementById('progress');
+        const uploadStatus = document.getElementById('upload-status');
+        const fileCount = document.getElementById('file-count');
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const resultsTable = document.getElementById('results-table');
+        const sendEmailsBtn = document.getElementById('send-emails');
+        const emailModal = document.getElementById('email-modal');
+        const closeModal = document.getElementById('close-modal');
+        const confirmSend = document.getElementById('confirm-send');
+        const previewEmails = document.getElementById('preview-emails');
+        const previewModal = document.getElementById('preview-modal');
+        const closePreview = document.getElementById('close-preview');
+        const backToEdit = document.getElementById('back-to-edit');
+        const finalSend = document.getElementById('final-send');
+
+        // Event Listeners
+        browseFiles.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelection);
+        dropzone.addEventListener('dragover', handleDragOver);
+        dropzone.addEventListener('dragleave', handleDragLeave);
+        dropzone.addEventListener('drop', handleDrop);
+        analyzeBtn.addEventListener('click', analyzeResumes);
+        sendEmailsBtn.addEventListener('click', () => emailModal.classList.remove('hidden'));
+        closeModal.addEventListener('click', () => emailModal.classList.add('hidden'));
+        confirmSend.addEventListener('click', prepareEmailSending);
+        previewEmails.addEventListener('click', showEmailPreview);
+        closePreview.addEventListener('click', () => previewModal.classList.add('hidden'));
+        backToEdit.addEventListener('click', () => {
+            previewModal.classList.add('hidden');
+            emailModal.classList.remove('hidden');
+        });
+        finalSend.addEventListener('click', sendEmails);
+
+        // Tab Switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.add('hidden');
+            });
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+            document.querySelector(`.tab-button[onclick="switchTab('${tabName}')"]`).classList.add('active');
+        }
+
+        // File handling functions
+        function handleDragOver(e) {
+            e.preventDefault();
+            dropzone.classList.add('drag-over');
+        }
+
+        function handleDragLeave() {
+            dropzone.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            dropzone.classList.remove('drag-over');
+            handleFiles(e.dataTransfer.files);
+        }
+
+        function handleFileSelection(e) {
+            handleFiles(e.target.files);
+        }
+
+        function handleFiles(files) {
+            if (files.length > 100) {
+                alert('Maximum 100 files can be uploaded at once');
+                return;
+            }
+            
+            uploadedFiles = Array.from(files);
+            fileCount.textContent = `${uploadedFiles.length} files selected`;
+            uploadStatus.textContent = 'Ready to upload';
+            analyzeBtn.disabled = uploadedFiles.length === 0;
+            
+            // Simulate upload progress
+            simulateUpload();
+        }
+
+        function simulateUpload() {
+            let progressValue = 0;
+            const interval = setInterval(() => {
+                progressValue += Math.random() * 10;
+                if (progressValue >= 100) {
+                    progressValue = 100;
+                    clearInterval(interval);
+                    uploadStatus.textContent = `Upload complete - ${uploadedFiles.length} files ready for analysis`;
+                }
+                progress.style.width = `${progressValue}%`;
+            }, 200);
+        }
+
+        // Resume analysis functions
+        function analyzeResumes() {
+            const jobTitle = document.getElementById('job-title').value;
+            const requiredSkills = document.getElementById('required-skills').value.split(',').map(skill => skill.trim());
+            const minExperience = parseInt(document.getElementById('min-experience').value) || 0;
+            const educationLevel = document.getElementById('education-level').value;
+            const keywords = document.getElementById('keywords').value.split(',').map(keyword => keyword.trim());
+            
+            if (!jobTitle) {
+                alert('Please enter the job title');
+                return;
+            }
+
+            if (requiredSkills.length === 0) {
+                alert('Please enter at least one required skill');
+                return;
+            }
+
+            uploadStatus.textContent = 'Analyzing resumes...';
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = 'Analyzing...';
+
+            // Simulate Azure AI analysis (in a real app, this would call Azure AI services)
+            setTimeout(() => {
+                analysisResults = uploadedFiles.map((file, index) => {
+                    // Generate fake analysis data
+                    const email = `candidate${index + 1}@example.com`;
+                    const name = `Candidate ${String.fromCharCode(65 + index)}`;
+                    const skills = ['JavaScript', 'Python', 'Teamwork'].sort(() => Math.random() - 0.5).slice(0, 2);
+                    const experience = Math.floor(Math.random() * 10);
+                    const education = ['High School', 'Bachelor', 'Master', 'PhD'][Math.floor(Math.random() * 4)];
+                    
+                    // Calculate match score
+                    let score = 0;
+                    if (skills.some(skill => requiredSkills.includes(skill))) score += 30;
+                    if (experience >= minExperience) score += 20;
+                    if (!educationLevel || education === educationLevel) score += 20;
+                    if (keywords.some(keyword => name.includes(keyword) || skills.includes(keyword))) score += 10;
+                    score += Math.random() * 20; // Add some randomness
+                    
+                    // Determine status
+                    const status = score > 60 ? 'Shortlisted' : 'Rejected';
+                    if (status === 'Shortlisted') {
+                        shortlistedCandidates.push({ name, email, jobTitle });
+                    }
+
+                    return {
+                        name,
+                        email,
+                        skills: skills.join(', '),
+                        experience: `${experience} years`,
+                        education,
+                        status,
+                        score: Math.round(score)
+                    };
+                });
+
+                displayResults();
+                switchTab('results');
+                uploadStatus.textContent = 'Analysis complete';
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = 'Analyze Resumes';
+            }, 3000);
+        }
+
+        function displayResults() {
+            document.getElementById('total-resumes').textContent = analysisResults.length;
+            document.getElementById('shortlisted-count').textContent = analysisResults.filter(r => r.status === 'Shortlisted').length;
+            document.getElementById('rejected-count').textContent = analysisResults.filter(r => r.status === 'Rejected').length;
+
+            resultsTable.innerHTML = '';
+            analysisResults.forEach(result => {
+                const row = document.createElement('tr');
+                row.className = result.status === 'Shortlisted' ? 'bg-green-50' : 'bg-red-50';
+                row.innerHTML = `
+                    <td class="px-4 py-2">${result.name}</td>
+                    <td class="px-4 py-2">${result.email}</td>
+                    <td class="px-4 py-2">${result.skills}</td>
+                    <td class="px-4 py-2">${result.experience}</td>
+                    <td class="px-4 py-2">${result.education}</td>
+                    <td class="px-4 py-2">
+                        <span class="inline-block px-2 py-1 text-xs rounded-full ${result.status === 'Shortlisted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${result.status}
+                        </span>
+                    </td>
+                    <td class="px-4 py-2 font-medium">${result.score}/100</td>
+                `;
+                resultsTable.appendChild(row);
+            });
+        }
+
+        // Email functions
+        function prepareEmailSending() {
+            if (shortlistedCandidates.length === 0) {
+                alert('No shortlisted candidates to email');
+                emailModal.classList.add('hidden');
+                return;
+            }
+            emailModal.classList.add('hidden');
+            showEmailPreview();
+        }
+
+        function showEmailPreview() {
+            const subject = document.getElementById('email-subject').value;
+            let body = document.getElementById('email-body').value;
+            
+            // Replace placeholders with first candidate's data for preview
+            const candidate = shortlistedCandidates[0];
+            let previewBody = body
+                .replace('[Candidate Name]', candidate.name)
+                .replace('[Job Title]', candidate.jobTitle)
+                .replace('[Your Name]', 'HR Team');
+            
+            document.getElementById('email-preview-container').innerHTML = `
+                <p class="font-medium mb-2">Subject: ${subject}</p>
+                <div class="prose max-w-none">
+                    ${previewBody.replace(/\n/g, '<br>')}
+                </div>
+                <p class="mt-4 text-sm text-gray-500">Preview for ${candidate.name} (${shortlistedCandidates.length} emails will be sent)</p>
+            `;
+            
+            previewModal.classList.remove('hidden');
+            emailModal.classList.add('hidden');
+        }
+
+        function sendEmails() {
+            const subject = document.getElementById('email-subject').value;
+            let body = document.getElementById('email-body').value;
+            
+            // In a real application, this would send actual emails
+            previewModal.classList.add('hidden');
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            shortlistedCandidates.forEach(candidate => {
+                const emailBody = body
+                    .replace('[Candidate Name]', candidate.name)
+                    .replace('[Job Title]', candidate.jobTitle)
+                    .replace('[Your Name]', 'HR Team');
+                
+                if (candidate.email) {
+                    console.log(`Email would be sent to: ${candidate.email}`);
+                    console.log(`Subject: ${subject}`);
+                    console.log(`Body: ${emailBody}`);
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+            });
+            
+            alert(`Emails sent successfully to ${successCount} candidates. ${failCount} failed due to missing email addresses.`);
+        }
+    </script>
+</body>
+</html>
+```
