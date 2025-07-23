@@ -1,0 +1,39 @@
+
+
+.dropzone {
+    border: 2px dashed #0284c7;
+    border-radius: 5px;
+    padding: 25px;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+.dropzone:hover {
+    background-color: #f0f9ff;
+}
+.dropzone.drag-over {
+    background-color: #e0f2fe;
+}
+.resume-card {
+    transition: all 0.3s;
+}
+.resume-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+}
+.progress-bar {
+    width: 100%;
+    height: 6px;
+    background-color: #e5e7eb;
+    border-radius: 3px;
+    overflow: hidden;
+}
+.progress-value {
+    height: 100%;
+    background-color: #3b82f6;
+    transition: width 0.3s;
+}
+.tabs button.active {
+    border-bottom: 2px solid #101215;
+    color: #3b82f6;
+}
